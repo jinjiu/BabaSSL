@@ -9,6 +9,8 @@
 
 #include "internal/nelem.h"
 #include "testutil.h"
+#include <openssl/conf.h>
+#include <openssl/opensslconf.h>
 #include <openssl/ec.h>
 #include <openssl/pem.h>
 #include <openssl/objects.h>
