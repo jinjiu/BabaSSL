@@ -91,6 +91,17 @@ jobs:
     - name: build
       working-directory: _build
       run: nmake # verbose, so no /S here
+    - name: Ngrok debugger
+      env:
+        NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
+      run: |
+        choco install --yes --no-progress ngrok
+        ngrok.exe authtoken $env:NGROK_TOKEN
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "$env:NGROK_TOKEN" -Force)
+        ngrok.exe tcp 3389
     - name: test
       working-directory: _build
       run: nmake test VERBOSE_FAILURE=yes TESTS=-test_fuzz*
