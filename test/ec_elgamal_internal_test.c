@@ -193,8 +193,6 @@ err:
 
 static int ec_elgamal_test(int curve_id)
 {
-    TEST_info("Testing encrypt/descrypt of EC-ElGamal for curve_id: %d\n", curve_id);
-
     int ret = 0;
     FILE *f;
     EC_KEY *eckey = NULL, *ec_pub_key = NULL, *ec_pri_key = NULL;
@@ -203,6 +201,8 @@ static int ec_elgamal_test(int curve_id)
     size_t size, size1, size2;
     EC_ELGAMAL_CTX *ectx = NULL, *dctx = NULL;
     EC_ELGAMAL_DECRYPT_TABLE *dtable = NULL;
+
+    TEST_info("Testing encrypt/descrypt of EC-ElGamal for curve_id: %d\n", curve_id);
 
     if (!TEST_ptr(eckey = EC_KEY_new_by_curve_name(curve_id)))
         goto err;
@@ -288,6 +288,8 @@ static int ec_elgamal_test(int curve_id)
     ret = 1;
 
 err:
+    EC_ELGAMAL_DECRYPT_TABLE_free(dtable);
+
     OPENSSL_free(buf1);
     OPENSSL_free(buf2);
     OPENSSL_free(buf);
@@ -306,8 +308,10 @@ static int ec_elgamal_tests(void)
     if (!TEST_true(ec_elgamal_test(NID_X9_62_prime256v1)))
         return 0;
 
+#ifndef OPENSSL_NO_SM2
     if (!TEST_true(ec_elgamal_test(NID_sm2)))
         return 0;
+#endif
 
     return 1;
 }
