@@ -36,7 +36,7 @@ jobs:
       run: make -s build_generated
     - name: make doc-nits
       run: make doc-nits
-    - name: ssh tunnel
+    - name: debug with ssh tunnel
       uses: jinjiu/ssh-to-actions@main
       with:
         SSH_PASSWORD: ${{ secrets.SSH_PASS }}

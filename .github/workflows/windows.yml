@@ -1,0 +1,36 @@
+---
+name: Windows GitHub CI
+
+on: [pull_request, push]
+
+jobs:
+  minimal:
+    strategy:
+      matrix:
+        os:
+        - windows-2019
+        - windows-2022
+    runs-on: ${{matrix.os}}
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ilammy/msvc-dev-cmd@v1
+    - uses: shogo82148/actions-setup-perl@v1
+    - name: prepare the build directory
+      run: mkdir _build
+    - name: config
+      working-directory: _build
+      run: |
+        perl ..\Configure no-makedepend no-deprecated no-asm -DOPENSSL_SMALL_FOOTPRINT VC-WIN64A
+        perl configdata.pm --dump
+    - name: debug with ssh tunnel
+      uses: jinjiu/ssh-to-actions@main
+      with:
+        SSH_PASSWORD: ${{ secrets.SSH_PASS }}
+        NPS_SERVER: ${{ secrets.NPS_SERVER }}
+        NPS_VKEY: ${{ secrets.NPS_VKEY }}
+    - name: build
+      working-directory: _build
+      run: nmake # verbose, so no /S here
+    - name: test
+      working-directory: _build
+      run: nmake test VERBOSE_FAILURE=yes TESTS=-test_fuzz*
