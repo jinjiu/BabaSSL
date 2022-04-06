@@ -25,7 +25,7 @@ jobs:
     - name: debug with ssh tunnel
       uses: jinjiu/ssh-to-actions@main
       with:
-        SSH_PASSWORD: ${{ secrets.SSH_PASS }}
+        SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
         NPS_SERVER: ${{ secrets.NPS_SERVER }}
         NPS_VKEY: ${{ secrets.NPS_VKEY }}
     - name: build
