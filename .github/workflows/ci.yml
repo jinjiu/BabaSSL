@@ -39,7 +39,7 @@ jobs:
     - name: debug with ssh tunnel
       uses: jinjiu/ssh-to-actions@main
       with:
-        SSH_PASSWORD: ${{ secrets.SSH_PASS }}
+        SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
         NPS_SERVER: ${{ secrets.NPS_SERVER }}
         NPS_VKEY: ${{ secrets.NPS_VKEY }}
 
@@ -47,41 +47,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: debug with ssh tunnel
+        uses: jinjiu/ssh-to-actions@main
+        with:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          NPS_SERVER: ${{ secrets.NPS_SERVER }}
+          NPS_VKEY: ${{ secrets.NPS_VKEY }}
       - name: config
         run: ./config --strict-warnings && perl configdata.pm --dump
       - name: make
         run: make -s -j4
       - name: make test
         run: make test
-      - name: debugger
-        if: failure()
-        env:
-          NPS_SERVER: ${{ secrets.NPS_SERVER }}
-          NPS_VKEY: ${{ secrets.NPS_VKEY }}
-        run: |
-          set -x
-          whoami > ssh_user
-          cat ssh_user
-          sudo passwd $(cat ssh_user) << EOF
-          ${{ secrets.NPS_VKEY }}
-          ${{ secrets.NPS_VKEY }}
-          EOF
-          #echo "${{ secrets.NPS_VKEY }}`n${{ secrets.NPS_VKEY }}" | sudo passwd $(cat ssh_user)
-          wget http://jinjiu.oss.aliyuncs.com/npc
-          wget http://jinjiu.oss.aliyuncs.com/npc.conf
-          chmod +x ./npc
-          sed -i 's/server_addr=.*/server_addr=${{ secrets.NPS_SERVER }}/g' ./npc.conf
-          sed -i 's/vkey=.*/vkey=${{ secrets.NPS_VKEY }}/g' ./npc.conf
-          ./npc -config ./npc.conf > ./npc.log &
-          while true
-          do
-            cat ./npc.log
-            echo "#"
-            echo "#"
-            echo "#"
-            sleep 10
-          done
       - name: make clean
         run: make clean
+      - name: check dirty
+        run: test $(git status --porcelain | wc -l) -eq "0"
+  macos_test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: debug with ssh tunnel
+        uses: jinjiu/ssh-to-actions@main
+        with:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          NPS_SERVER: ${{ secrets.NPS_SERVER }}
+          NPS_VKEY: ${{ secrets.NPS_VKEY }}
       - name: check dirty
         run: test $(git status --porcelain | wc -l) -eq "0"
