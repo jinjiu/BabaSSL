@@ -1,0 +1,31 @@
+name: Benchmark
+
+on: [pull_request, push]
+
+# for some reason, this does not work:
+# variables:
+#   BUILDOPTS: "-j4"
+
+# not implemented for v1.1.1: HARNESS_JOBS: "${HARNESS_JOBS:-4}"
+
+# for some reason, this does not work:
+# before_script:
+#     - make="make -s"
+
+jobs:
+  test:
+    runs-on: [self-hosted,X64]
+    steps:
+      - uses: actions/checkout@v2
+      - name: config
+        run: ./config --strict-warnings enable-ec_elgamal enable-ntls enable-sm2 enable-sm3 enable-sm4 && perl configdata.pm --dump
+      - name: make
+        run: make -j4
+      - name: speed test
+        run: |
+          LD_LIBRARY_PATH=. ./apps/openssl speed sm2
+          sleep 1000
+      - name: make clean
+        run: make clean
+      - name: check dirty
+        run: test $(git status --porcelain | wc -l) -eq "0"
