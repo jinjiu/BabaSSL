@@ -1,123 +1,142 @@
 name: Benchmark
 
-on: [pull_request, push]
-
-# for some reason, this does not work:
-# variables:
-#   BUILDOPTS: "-j4"
-
-# not implemented for v1.1.1: HARNESS_JOBS: "${HARNESS_JOBS:-4}"
-
-# for some reason, this does not work:
-# before_script:
-#     - make="make -s"
+on:
+  pull_request:
+  push:
+  schedule:
+    - cron: '0 */8 * * *'
 
 jobs:
   test:
     runs-on: [self-hosted,X64]
+    env:
+      MYSQL_ARG: "--mysql-host=${{ secrets.MYSQL_HOST }} --mysql-user=${{ secrets.MYSQL_USER }} --mysql-password=${{ secrets.MYSQL_PASSWORD }} --mysql-db=${{ secrets.MYSQL_DB }}"
     steps:
       - uses: actions/checkout@v2
         with:
           ref: ${{ github.head_ref }}
+      - name: fetch all branch
+        uses: nick-fields/retry@v2
+        with:
+          timeout_seconds: 30
+          max_attempts: 60
+          shell: bash
+          command: git fetch --depth=1
       - name: config
         run: ./config --strict-warnings enable-ec_elgamal enable-ntls enable-sm2 enable-sm3 enable-sm4 && perl configdata.pm --dump
       - name: make
         run: make -j4
-      - name: symmetric encryption speed test
+      - name: Set current date as env variable
+        run: echo "NOW=$(date +'%F~%T')" >> $GITHUB_ENV
+      - name: save cpu and memory info
+        shell: bash
         run: |
+          mkdir -p speed/cpu
+          mkdir -p speed/mem
+          lscpu > speed/cpu/$NOW.txt
+          free -m > speed/mem/$NOW.txt
+      - name: symmetric encryption speed test
+        shell: bash
+        run: |
+          set -x
+          commit=`git rev-parse HEAD`
           algo_type="symmetric_encryption"
           algos=(aes-256-gcm aes-256-ccm aes-256-cbc aes-128-gcm aes-128-ccm aes-128-cbc sm4-gcm sm4-ccm sm4-cbc)
           for algo in ${algos[@]}
           do
             mkdir -p speed/$algo_type/$algo
-            NOW=`date +%F~%T`
-            LD_LIBRARY_PATH=. ./apps/openssl speed -evp $algo | tee ./speed/$algo_type/$algo/$NOW.txt
+            now=`date +"%F %T"`
+            FILE="./speed/$algo_type/$algo/$NOW.txt"
+            echo "commit: $commit" >> $FILE
+            echo "date: $now" >> $FILE
+            LD_LIBRARY_PATH=. ./apps/openssl speed -evp $algo | tee -a $FILE
+            python3 /home/runner/speed_parse.py -f $FILE -t $algo_type $MYSQL_ARG
           done
-          #- name: asymmetric encryption speed test
-          #  run: |
-          #    echo "TODO"
-          #  - name: signature speed test
-          #    run: |
-          #      algo_type="signature"
-          #      algos=(rsa2048 ecdsap256 ed25519 sm2)
-          #      for algo in ${algos[@]}
-          #      do
-          #        mkdir -p speed/$algo_type/$algo
-          #        NOW=`date +%F~%T`
-          #        LD_LIBRARY_PATH=. ./apps/openssl speed $algo | tee ./speed/$algo_type/$algo/$NOW.txt
-          #      done
-          #  - name: digest speed test
-          #    run: |
-          #      algo_type="digest"
-          #      algos=(sha256 sm3)
-          #      for algo in ${algos[@]}
-          #      do
-          #        mkdir -p speed/$algo_type/$algo
-          #        NOW=`date +%F~%T`
-          #        LD_LIBRARY_PATH=. ./apps/openssl speed -evp $algo | tee ./speed/$algo_type/$algo/$NOW.txt
-          #      done
-          #  - name: key_exchange speed test
-          #    run: |
-          #      algo_type="key_exchange"
-          #      algos=(ecdhp256 ecdhp384 ecdhp521 ecdhx448 ecdhx25519)
-          #      for algo in ${algos[@]}
-          #      do
-          #        mkdir -p speed/$algo_type/$algo
-          #        NOW=`date +%F~%T`
-          #        LD_LIBRARY_PATH=. ./apps/openssl speed $algo | tee ./speed/$algo_type/$algo/$NOW.txt
-          #      done
-          #  - name: phe speed test
-          #    run: |
-          #      algo_type="phe"
-          #      algos=(ecelgamalp256 ecelgamalsm2)
-          #      for algo in ${algos[@]}
-          #      do
-          #        mkdir -p speed/$algo_type/$algo
-          #        NOW=`date +%F~%T`
-          #        LD_LIBRARY_PATH=. ./apps/openssl speed $algo | tee ./speed/$algo_type/$algo/$NOW.txt
-          #      done
-      - uses: stefanzweifel/git-auto-commit-action@v4
+          echo $MYSQL_ARG > /tmp/mysql_arg.txt
+      - name: asymmetric encryption speed test
+        shell: bash
+        run: |
+          echo "TODO"
+      - name: signature speed test
+        shell: bash
+        run: |
+          commit=`git rev-parse HEAD`
+          algo_type="signature"
+          algos=(rsa2048 ecdsap256 ed25519 sm2)
+          for algo in ${algos[@]}
+          do
+            mkdir -p speed/$algo_type/$algo
+            now=`date +"%F %T"`
+            FILE="./speed/$algo_type/$algo/$NOW.txt"
+            echo "commit: $commit" >> $FILE
+            echo "date: $now" >> $FILE
+            LD_LIBRARY_PATH=. ./apps/openssl speed $algo | tee -a $FILE
+            python3 /home/runner/speed_parse.py -f $FILE -t $algo_type $MYSQL_ARG
+          done
+      - name: digest speed test
+        shell: bash
+        run: |
+          commit=`git rev-parse HEAD`
+          algo_type="digest"
+          algos=(sha256 sm3)
+          for algo in ${algos[@]}
+          do
+            mkdir -p speed/$algo_type/$algo
+            now=`date +"%F %T"`
+            FILE="./speed/$algo_type/$algo/$NOW.txt"
+            echo "commit: $commit" >> $FILE
+            echo "date: $now" >> $FILE
+            LD_LIBRARY_PATH=. ./apps/openssl speed -evp $algo | tee -a $FILE
+            python3 /home/runner/speed_parse.py -f $FILE -t $algo_type $MYSQL_ARG
+          done
+      - name: key_exchange speed test
+        shell: bash
+        run: |
+          commit=`git rev-parse HEAD`
+          algo_type="key_exchange"
+          algos=(ecdhp256 ecdhp384 ecdhp521 ecdhx448 ecdhx25519)
+          for algo in ${algos[@]}
+          do
+            mkdir -p speed/$algo_type/$algo
+            now=`date +"%F %T"`
+            FILE="./speed/$algo_type/$algo/$NOW.txt"
+            echo "commit: $commit" >> $FILE
+            echo "date: $now" >> $FILE
+            LD_LIBRARY_PATH=. ./apps/openssl speed $algo | tee -a $FILE
+            python3 /home/runner/speed_parse.py -f $FILE -t $algo_type $MYSQL_ARG
+          done
+      - name: phe speed test
+        shell: bash
+        run: |
+          commit=`git rev-parse HEAD`
+          algo_type="phe"
+          algos=(ecelgamalp256 ecelgamalsm2)
+          for algo in ${algos[@]}
+          do
+            mkdir -p speed/$algo_type/$algo
+            now=`date +"%F %T"`
+            FILE="./speed/$algo_type/$algo/$NOW.txt"
+            echo "commit: $commit" >> $FILE
+            echo "date: $now" >> $FILE
+            LD_LIBRARY_PATH=. ./apps/openssl speed $algo | tee -a $FILE
+            python3 /home/runner/speed_parse.py -f $FILE -t $algo_type $MYSQL_ARG
+          done
+      - name: switch to the speed-auto-test branch and commit speed test result file
+        run: |
+          set -x
+          git checkout speed-auto-test
+          git add ./speed/*
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -a -m "Benchmark automated testing." \
+              --author="${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>"
+      - name: push speed test result
+        uses: nick-fields/retry@v2
         with:
-          # Optional but recommended
-          # Defaults to "Apply automatic changes"
-          commit_message: Benchmark automated testing.
-
-          create_branch: false
-
-          # Optional branch name where commit should be pushed to
-          # Defaults to the current branch
-          branch: speed-auto-test
-
-          # Optional options appended to `git-commit`
-          # See https://git-scm.com/docs/git-commit for a list of available options
-          commit_options: '--no-verify --signoff'
-
-          # Optional glob pattern of files which should be added to the commit
-          # Defaults to all (.)
-          # See the `pathspec`-documentation for git
-          # - https://git-scm.com/docs/git-add#Documentation/git-add.txt-ltpathspecgt82308203
-          # - https://git-scm.com/docs/gitglossary#Documentation/gitglossary.txt-aiddefpathspecapathspec
-          file_pattern: speed/*
-
-          # Optional local file path to the repository
-          # Defaults to the root of the repository
-          repository: .
-
-          # Optional commit user and author settings
-          # commit_user_name: My GitHub Actions Bot # defaults to "GitHub Actions"
-          # commit_user_email: my-github-actions-bot@example.org # defaults to "actions@github.com"
-          # commit_author: Author <actions@github.com> # defaults to author of the commit that triggered the run
-
-          # Optional tag message
-          # Action will create and push a new tag to the remote repository and the defined branch
-          #tagging_message: 'v1.0.0'
-
-          # Optional options appended to `git-push`
-          # See git-push documentation for details: https://git-scm.com/docs/git-push#_options
-          #push_options: '--force'
-
-          # Optional: Disable dirty check and always try to create a commit and push
-          skip_dirty_check: true
+          timeout_seconds: 30
+          max_attempts: 60
+          shell: bash
+          command: git push -u origin speed-auto-test:speed-auto-test
       - name: make clean
         run: make clean
       - name: check dirty
