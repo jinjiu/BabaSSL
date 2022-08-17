@@ -17,6 +17,7 @@
 #include <openssl/srp.h>
 #include <openssl/txt_db.h>
 #include <openssl/aes.h>
+#include <arpa/inet.h>
 
 #include "helpers/ssltestlib.h"
 #include "testutil.h"
