@@ -1,0 +1,112 @@
+# Copyright 2021 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the Apache License 2.0 (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
+name: Tongsuo Release
+
+on:
+  release:
+    types: [published]
+    branches: [ master, 8.2-stable, 8.3-stable ]
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        # The platform matrix specifies:
+        #   arch: the architecture to build for, this defines the tool-chain
+        #         prefix {arch}- and the Debian compiler package gcc-{arch}
+        #         name.
+        #   libs: the Debian package for the necessary link/runtime libraries.
+        #   target: the OpenSSL configuration target to use, this is passed
+        #           directly to the config command line.
+        #   fips:   set to "no" to disable building FIPS, leave unset to
+        #           build the FIPS provider.
+        #   tests: omit this to run all the tests using QEMU, set it to "none"
+        #          to never run the tests, otherwise its value is passed to
+        #          the "make test" command to allow selective disabling of
+        #          tests.
+        platform: [
+          {
+            arch: x86_64-linux-gnu,
+            libs: libc6-dev-amd64-cross,
+            target: linux-x86_64
+          }, {
+            arch: aarch64-linux-gnu,
+            libs: libc6-dev-arm64-cross,
+            target: linux-aarch64
+          }
+        ]
+    runs-on: ubuntu-latest
+    steps:
+    - name: install packages
+      run: |
+        sudo apt-get update
+        sudo apt-get -yq --force-yes install \
+            gcc-${{ matrix.platform.arch }} \
+            ${{ matrix.platform.libs }}
+    - uses: actions/checkout@v2
+    - name: modprobe tls
+      run: sudo modprobe tls
+    - name: config
+      run: ./config --banner=Configured --strict-warnings --prefix=/opt/tongsuo --cross-compile-prefix=${{ matrix.platform.arch }}- ${{ matrix.platform.target }} enable-ssl-trace enable-zlib enable-zlib-dynamic enable-crypto-mdebug enable-crypto-mdebug-backtrace enable-egd enable-ktls enable-fips enable-ntls enable-optimize-chacha-choose enable-status enable-crypto-mdebug-count enable-cert-compression enable-delegated-credential enable-ec_elgamal enable-sm2 enable-sm3 enable-sm4 enable-dynamic-ciphers enable-session-lookup enable-session-reused-type enable-rsa-multi-prime-key-compat enable-skip-scsv enable-verify-sni enable-evp-cipher-api-compat && perl configdata.pm --dump
+    - name: make
+      run: make -j
+    - name: make install
+      run: make install
+    - name: pack
+      run: tar zcvf ./tongsuo-${{ matrix.platform.target }}.tar.gz /opt/tongsuo
+    - name: Upload
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          tongsuo-linux-amd64.tar.gz
+          tongsuo-linux-aarch64.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #build-windows:
+  #  strategy:
+  #    matrix:
+  #      os:
+  #        - windows-2019
+  #        - windows-2022
+  #      platform:
+  #        - arch: win64
+  #          config: VC-WIN64A enable-fips
+  #        - arch: win32
+  #          config: VC-WIN32 --strict-warnings no-fips
+  #  runs-on: ${{matrix.os}}
+  #  steps:
+  #  - uses: actions/checkout@v2
+  #  - uses: ilammy/msvc-dev-cmd@v1
+  #    with:
+  #      arch: ${{ matrix.platform.arch }}
+  #  - uses: ilammy/setup-nasm@v1
+  #    with:
+  #      platform: ${{ matrix.platform.arch }}
+  #  - uses: shogo82148/actions-setup-perl@v1
+  #  - name: prepare the build directory
+  #    run: mkdir _build
+  #  - name: config
+  #    working-directory: _build
+  #    run: |
+  #      perl ..\Configure --banner=Configured --prefix=/opt/tongsuo no-makedepend ${{ matrix.platform.config }} enable-ssl-trace enable-zlib enable-zlib-dynamic enable-crypto-mdebug enable-crypto-mdebug-backtrace enable-egd enable-ktls enable-fips enable-ntls enable-optimize-chacha-choose enable-status enable-crypto-mdebug-count enable-cert-compression enable-delegated-credential enable-ec_elgamal enable-sm2 enable-sm3 enable-sm4 enable-dynamic-ciphers enable-session-lookup enable-session-reused-type enable-rsa-multi-prime-key-compat enable-skip-scsv enable-verify-sni enable-evp-cipher-api-compat && perl configdata.pm --dump
+  #      perl configdata.pm --dump
+  #  - name: build
+  #    working-directory: _build
+  #    run: nmake /S
+  #  - name: test
+  #    working-directory: _build
+  #    run: nmake test VERBOSE_FAILURE=yes TESTS=-test_fuzz* HARNESS_JOBS=4
+  #  - name: install
+  #    # Run on 64 bit only as 32 bit is slow enough already
+  #    if: $${{ matrix.platform.arch == 'win64' }}
+  #    run: |
+  #      mkdir _dest
+  #      nmake install DESTDIR=_dest
+  #    working-directory: _build
